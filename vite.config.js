@@ -11,11 +11,11 @@ export default defineConfig({
         vue(),
     ],
     server: {
-        host: 'laravel12.local',  // 👈 your local domain
+        host: 'laravel-vue.test',  // 👈 your local domain
         port: 5173,               // default Vite port
         cors: true,               // enable CORS
         hmr: {
-            host: 'laravel12.local',
+            host: 'laravel-vue.test',
         },
     },
 })
