@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Database\QueryException;
 use Exception;
+use App\Events\PublicMessageSent;
 
 class UserController extends Controller
 {
@@ -60,6 +61,8 @@ class UserController extends Controller
                 'email'    => $request->email,
                 'password' => bcrypt($request->password),
             ]);
+
+            event(new PublicMessageSent("New user created: " . $user->name));
 
             return response()->json([
                 'status'  => true,
