@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-100 flex flex-col items-center py-8">
+  <div class="">
     <div class="bg-white shadow-lg rounded-lg w-full max-w-5xl p-6">
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-bold text-gray-800">User Management</h2>
