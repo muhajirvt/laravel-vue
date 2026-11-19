@@ -2,153 +2,140 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\User;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Database\QueryException;
-use Exception;
 use App\Events\PublicMessageSent;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreUserRequest;
+use App\Http\Requests\UpdateUserRequest;
+use App\Http\Resources\UserResource;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use RuntimeException;
+use Throwable;
 
 class UserController extends Controller
 {
-    /**
-     * Display paginated users.
-     */
-    public function index()
+    public function index(Request $request)
     {
-        try {
-            $users = User::select('id', 'name', 'email', 'created_at')->orderBy('id', 'desc')->paginate(15);
+        $users = User::select('id', 'name', 'email', 'avatar_path', 'created_at')
+            ->orderByDesc('id')
+            ->paginate(15);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Users fetched successfully.',
-                'data' => $users->items(),
-                'pagination' => [
-                    'current_page' => $users->currentPage(),
-                    'last_page' => $users->lastPage(),
-                    'per_page' => $users->perPage(),
-                    'total' => $users->total(),
-                ]
-            ], 200);
-        } catch (Exception $e) {
-            return $this->serverError($e);
-        }
+        return response()->json([
+            'status' => true,
+            'message' => 'Users fetched successfully.',
+            'data' => UserResource::collection($users->getCollection())->resolve($request),
+            'pagination' => [
+                'current_page' => $users->currentPage(),
+                'last_page' => $users->lastPage(),
+                'per_page' => $users->perPage(),
+                'total' => $users->total(),
+            ],
+        ]);
     }
 
-    /**
-     * Store a new user.
-     */
-    public function store(Request $request)
+    public function store(StoreUserRequest $request)
     {
-        try {
-            $validator = Validator::make($request->all(), [
-                'name'     => 'required|string|max:255',
-                'email'    => 'required|string|email|max:255|unique:users,email',
-                'password' => 'required|string|min:8',
-            ]);
+        $validated = $request->validated();
 
-            if ($validator->fails()) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Validation failed.',
-                    'errors'  => $validator->errors(),
-                ], 422);
+        $imagePath = $this->storeImage($request);
+
+        try {
+            $user = User::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'password' => $validated['password'],
+                'avatar_path' => $imagePath,
+            ]);
+        } catch (Throwable $exception) {
+            if ($imagePath) {
+                Storage::delete($imagePath);
             }
 
-            $user = User::create([
-                'name'     => $request->name,
-                'email'    => $request->email,
-                'password' => bcrypt($request->password),
-            ]);
-
-            event(new PublicMessageSent("New user created: " . $user->name));
-
-            return response()->json([
-                'status'  => true,
-                'message' => 'User created successfully.',
-                'data'    => $user,
-            ], 201);
-        } catch (QueryException $e) {
-            return $this->serverError($e, 'Database error occurred.');
-        } catch (Exception $e) {
-            return $this->serverError($e);
+            throw $exception;
         }
+
+        event(new PublicMessageSent('New user created: '.$user->name));
+
+        return response()->json([
+            'status' => true,
+            'message' => 'User created successfully.',
+            'data' => new UserResource($user),
+        ], 201);
     }
 
-    /**
-     * Show user details.
-     */
     public function show(User $user)
     {
         return response()->json([
-            'status'  => true,
+            'status' => true,
             'message' => 'User fetched successfully.',
-            'data'    => $user
-        ], 200);
+            'data' => new UserResource($user),
+        ]);
     }
 
-    /**
-     * Update a user.
-     */
-    public function update(Request $request, User $user)
+    public function avatar(User $user)
     {
-        try {
-            $validator = Validator::make($request->all(), [
-                'name'  => 'required|string|max:255',
-                'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
-            ]);
+        abort_unless($user->avatar_path && Storage::exists($user->avatar_path), 404);
 
-            if ($validator->fails()) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Validation failed.',
-                    'errors'  => $validator->errors(),
-                ], 422);
+        return Storage::response($user->avatar_path);
+    }
+
+    public function update(UpdateUserRequest $request, User $user)
+    {
+        $validated = $request->validated();
+
+        $oldImagePath = $user->avatar_path;
+        $imagePath = $this->storeImage($request);
+
+        try {
+            $user->update([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'avatar_path' => $imagePath ?? $user->avatar_path,
+            ]);
+        } catch (Throwable $exception) {
+            if ($imagePath) {
+                Storage::delete($imagePath);
             }
 
-            $user->update($request->only(['name', 'email']));
-
-            return response()->json([
-                'status'  => true,
-                'message' => 'User updated successfully.',
-                'data'    => $user,
-            ], 200);
-        } catch (QueryException $e) {
-            return $this->serverError($e, 'Database error occurred.');
-        } catch (Exception $e) {
-            return $this->serverError($e);
+            throw $exception;
         }
+
+        if ($imagePath && $oldImagePath) {
+            Storage::delete($oldImagePath);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'User updated successfully.',
+            'data' => new UserResource($user),
+        ]);
     }
 
-    /**
-     * Delete a user.
-     */
     public function destroy(User $user)
     {
-        try {
-            $user->delete();
+        $avatarPath = $user->avatar_path;
+        $user->delete();
 
-            return response()->json([
-                'status'  => true,
-                'message' => 'User deleted successfully.',
-            ], 204);
-        } catch (QueryException $e) {
-            return $this->serverError($e, 'Database error occurred.');
-        } catch (Exception $e) {
-            return $this->serverError($e);
+        if ($avatarPath) {
+            Storage::delete($avatarPath);
         }
+
+        return response()->noContent();
     }
 
-    /**
-     * Centralized server error handler.
-     */
-    protected function serverError(Exception $e, $customMessage = 'Something went wrong, please try again later.')
+    private function storeImage(Request $request): ?string
     {
-        return response()->json([
-            'status'  => false,
-            'message' => $customMessage,
-            'error'   => $e->getMessage()
-        ], 500);
+        if (! $request->hasFile('image')) {
+            return null;
+        }
+
+        $path = Storage::putFile('users', $request->file('image'));
+
+        if (! is_string($path)) {
+            throw new RuntimeException('Unable to store the uploaded user image.');
+        }
+
+        return $path;
     }
 }

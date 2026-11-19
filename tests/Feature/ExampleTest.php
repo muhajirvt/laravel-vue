@@ -16,4 +16,10 @@ class ExampleTest extends TestCase
 
         $response->assertStatus(200);
     }
+
+    public function test_login_and_dashboard_paths_load_the_application(): void
+    {
+        $this->get('/login')->assertOk();
+        $this->get('/dashboard')->assertOk();
+    }
 }
