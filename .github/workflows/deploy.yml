@@ -154,8 +154,8 @@ jobs:
             # Run database migrations
             php artisan migrate --force
 
-            # Run Super Admin seeder
-            php artisan db:seed --class=SuperAdminSeeder --force
+            # Run database seeders
+            php artisan db:seed --force
 
             # Create storage symlink
             php artisan storage:link || true
