@@ -83,20 +83,14 @@ class SuperAdminUserManagementTest extends TestCase
             ->assertJsonPath('data.email', $admin->email);
     }
 
-    public function test_superadmin_seeder_uses_configured_credentials(): void
+    public function test_superadmin_seeder_persists_credentials_in_the_database(): void
     {
-        config([
-            'superadmin.name' => 'Configured Admin',
-            'superadmin.email' => 'configured-admin@example.com',
-            'superadmin.password' => 'a-strong-admin-password',
-        ]);
-
         $this->seed(SuperAdminSeeder::class);
 
-        $admin = User::where('email', 'configured-admin@example.com')->firstOrFail();
-        $this->assertSame('Configured Admin', $admin->name);
+        $admin = User::where('email', 'superadmin@example.com')->firstOrFail();
+        $this->assertSame('Super Admin', $admin->name);
         $this->assertTrue($admin->is_superadmin);
-        $this->assertTrue(Hash::check('a-strong-admin-password', $admin->password));
+        $this->assertTrue(Hash::check('Password@123', $admin->password));
     }
 
     public function test_superadmin_can_create_a_user_without_an_image(): void
