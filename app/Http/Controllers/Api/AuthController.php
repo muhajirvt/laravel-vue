@@ -16,7 +16,7 @@ class AuthController extends Controller
 
         $user = User::where('email', $credentials['email'])->first();
 
-        if (! $user || ! $user->is_superadmin || ! Hash::check($credentials['password'], $user->password)) {
+        if (! $user  || ! Hash::check($credentials['password'], $user->password)) {
             return response()->json([
                 'message' => 'The provided credentials are incorrect.',
             ], 401);
